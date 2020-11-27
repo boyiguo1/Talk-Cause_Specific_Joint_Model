@@ -1,0 +1,261 @@
+---
+title: "Using Stratified Cox Regression to Test Competing Risks"
+author: "Boyi Guo"
+institute: |
+  | Department of Biostatistics
+  | University of Alabama at Birmingham
+date: "Nov 19, 2020"
+output: 
+  beamer_presentation:
+    theme: "Szeged"
+    colortheme: "spruce"
+    toc: FALSE
+    number_section: false
+    slide_level: 2
+bibliography:
+  - bibliography.bib
+nocite: '@*'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE)
+library(drake)
+library(survival)
+library(gtsummary)
+library(tidyverse)
+loadd(analytic_dat)
+loadd(joint_cs_mdl)
+loadd(strk_cs_mdl)
+loadd(chd_cs_mdl)
+```
+
+
+# Objectives
+- Introduce an analytic approach to jointly model the cause-specific hazard for two or more competing events 
+  - Specifically, the hypothesis testing of differential effects <!-- of an exposure --> on the competing events 
+  <!-- where I will review what competing event is later -->
+- Demonstrate the implementation of the Cause-specific Joint Model
+
+<!-- A quick disclaimer here: I am focusing on the application perspective of the method, rather than the theoretical perspective. I will defer the theoretical discussion to other experts in the group. -->
+
+# Outline
+- Survival Analysis Review
+  - Stratified Cox Regression
+  - Competing Risk Analysis
+  - Cause-specific Hazard
+- Cause-specific Hazard Joint Modeling
+  - Problem Statement
+  - Formulation
+  - Implementation
+- REGARDS Example
+- Conclusion
+
+
+# Survival Analysis Review
+
+Definition:
+Survival analysis is a way to model time-to-event outcome while accounting for (mostly right) censoring that is non-informative and random.
+
+  - censoring: events of interest are not observed over the course of a study
+
+<!-- Example: people who died of COVID(unfornately) would considered as censored when we use REGARS data to study cardiovascular outcomes. or By the time REGARDS follow-up phases ends, people who still experience cardiovascular events would be consdidered censored-->
+
+Components:
+
+- Outcome: time-to-event and censoring status $(T_i, C_i)$
+- Survival function: $S(t) = Pr(T > t)$
+<!-- Survival function descirbes the distribution of event times. Kaplan-meier plot: the probability of the event of interest happens later than a time t.-->
+- Cumulative incidence function: $F(t) = 1- S(t) = Pr(T \le t)$
+- Hazard function:
+$$
+h(t) = \lim\limits_{\Delta t \rightarrow0}\frac{Pr(t\leq T < t+\Delta t|T \geq t)}{\Delta t}
+$$
+
+<!-- Hazard describes  the instantaneous rate of the occurrence of the event of interest in subjects who are currently at risk of the event-->
+<!-- with enough arithmetic manipulation, you can find a one-to-one relationship between h(t) and S(t), and hence can infer the survival function based on hazard function-->
+
+## Cox Propotional Hazard Regression
+- Assumption: the hazard are proportional
+    <!-- Fast and dirty way to evaluate is by looking at Kaplan Meier. No cross over-->
+- Formulation:
+  $$
+    h(t|x_i) = h_0(t)\exp(\beta x_i)
+  $$
+
+  where $\exp(\beta)$ is the hazard ratio,    
+  $h_0(t)$ is the baseline hazard function
+- Hazard ratio (HR) ranges (0,$\infty$), 
+  - HR > 1 means more likely to observe the event <!--compared to the reference value/level-->
+  - HR < 1 means less likely to observe the event
+    
+
+## Stratified Cox Proportional Hazard Regression   
+  - Used when stratified analysis are required
+  - Additional assumption: the risk associated with an exposure are the same across all strata, 
+  - Formulation:
+    $$
+      h_j(t|x_i) = h_{0j}(t) \exp(\beta x_i),
+    $$
+    where $h_{0j}(t)$ is the baseline hazard function for the $j$ the strata.
+    $exp(\beta)$ is the hazard ratio across all strata
+    
+## Stratified Cox Regression Example
+
+Race stratified analysis for CVD outcomes
+
+  - Research question: what is the effect of smoking on CVD risk among Blacks and Whites
+  - The hazard functions for different race groups are different because of the distinct baseline hazard function
+  - The estimate of hazard ratio associated with smoking is exp($\beta$) for all race groups
+
+## Competing Risk Analysis
+Definition: Competing risk exists when we have two or more mutually exclusive events of consideration
+
+  - either stroke or coronary heart disease (CHD)
+<!-- The reason of why we need a specific statistical models for competing risk is because observing one of the events change the risk of the other events-->
+<!-- The reason being observing one of the events change the risk of the other events-->
+<!-- TODO: improve this definition -->
+
+Components:
+
+  - Outcome:($T_i, C_i, J_i)$, where $J_i\in \{1, 2(, \dots) \}$ for event types
+  - Two types of hazard
+    - Cause-specific hazard
+    - Sub-distribution hazard, AKA Fine-Grey method
+
+@austin2016introduction stated "_subdistribution hazards models should be used for developing clinical prediction models and risk-scoring systems for survival outcomes, whereas cause-specific hazard models may be more appropriate for addressing epidemiological questions of etiology._"
+
+
+## Cause-specific hazard models
+- Used when studying etiology of diseases [@lau2009competing]
+- Fitting Cox models by focusing on the events of primary interest and treating the competing events as censored.
+- Formulation:
+  $$h_{J}(t|x_i)=h_{0,J}(t)\exp(\beta_{J} x_i)$$
+  where $J$ denotes different types of events
+
+- Animated demonstration in PowerPoint
+
+# Cause-specific Hazard Joint Modeling
+
+## REGARDS Example
+- Events of Interest: Stroke / CHD
+- Exposure of Interest: Smoking status (at baseline)
+- Research Question: 
+  - How does smoking affect the risk of stroke considering competing risk of CHD?
+  $$h_{Stroke}(t|x_i)=h_{0,Stroke}\exp(\beta_{Stroke} x_i)$$
+  - How does smoking affect the risk of CHD?
+  $$h_{CHD}(t|x_i)=h_{0,CHD}\exp(\beta_{CHD} x_i)$$
+  - Does smoking affect the risk of stroke the same way as the risk of CHD
+
+
+## Problem Statement
+How to test if the impact on the risks from an exposure are the same for all events?
+
+- The original cause-specific hazard model requires two models, one for each type of events by treating the other as censored outcome
+- Statistically, the hazard ratio of exposures are not directly comparable
+
+
+## Cause-specific Hazard Joint Model
+
+- @lunn1995applying proposed a joint modeling approach to estimate the cause specific hazards for both events using stratified Cox regression
+<!-- The idea is really similar to using statistical interaction to address modifying effect, which firstly analyzed using stratified analysis-->
+- Formulation for two event types:
+<!-- $$ -->
+<!-- h_{CHD}(t|x_i)=h_{0,CHD}\exp(\beta x_i + \beta^\prime\delta_i x_i), -->
+<!-- $$ -->
+<!-- $$ -->
+<!-- h_{Stroke}(t|x_i)=h_{0,Stroke}\exp(\beta x_i + \beta^\prime\delta_i x_i), -->
+<!-- $$ -->
+$$h_{J}(t|x_i)=h_{0J}(t)\exp(\beta x_i + \beta^\prime\delta_i x_i)$$
+where $\delta$ is an indicator variable: $\delta_i=1$ if J=1 and $\delta_i=0$ if J=2
+
+<!-- Unlike the original Cause-specific Model, we have one model that could model both types, and hence the risk "difference" in multiplicative scale is statistically testable. -->
+
+## Implementation
+- Basic idea:
+  1. Data augmentation
+      - Duplicate each event (both types) by treating the duplication as censored outcome
+      - Duplicate the censored events
+      - Create interaction term of event type & exposure
+  2. Stratified Cox model based on event type
+    $$h_{CHD}(t|x_i)=h_{0,CHD}\exp(\beta x_i + \beta^\prime\delta_i x_i)$$
+    $$h_{Stroke}(t|x_i)=h_{0,Stroke}\exp(\beta x_i + \beta^\prime\delta_i x_i)$$
+  
+  3. Test the interaction term $\beta^\prime$
+  
+  
+- Animated demonstration in PowerPoint
+
+<!-- ### Modified Cox PH Models - Lunn & McNeil -->
+<!-- - Data Augmentation -->
+<!-- - Stratified Model Based on event type -->
+
+
+# Toy Example
+- Events of Interest: Stroke / CHD
+- Exposure of Interest: Smoking status (at baseline)
+- Covariates: Age, Race
+- Research Question: 
+  - How does smoking affect the risk of stroke considering competing risk of CHD?
+  - How does smoking affect the risk of CHD?
+  - Does smoking affect the risk of stroke the same way as the risk of CHD
+
+
+## Cause-specific Hazard for Stroke
+```{r}
+tbl_regression(strk_cs_mdl, exponentiate = TRUE,
+               label = list(Age ~ "Age (years)", Race ~ "Race (Whites Vs Blacks)", Smoke_current ~ "Current Smoker"),
+               show_single_row = Race) %>% 
+  italicize_levels() #%>% 
+  # bold_labels()
+```
+
+## Cause-specific Hazard for CHD
+```{r}
+tbl_regression(chd_cs_mdl, exponentiate = TRUE,
+               label = list(Age ~ "Age (years)", Race ~ "Race (Whites Vs Blacks)", Smoke_current ~ "Current Smoker"
+                            ),
+                show_single_row = c(Race)) %>% 
+  italicize_levels() #%>% 
+  # bold_labels()
+```
+
+## Joint Model
+```{r}
+tbl_regression(joint_cs_mdl, exponentiate = TRUE,
+               label = list(Age ~ "Age", Race ~ "Race (Whites Vs Blacks)", Smoke_current ~ "Current Smoker",
+                            intr_Race ~ "Stroke*Race( Whites Vs Blacks)",
+                            intr_smoke ~ "Stroke*Smoker",
+                            intr_age ~ "Stroke*Age"),
+                show_single_row = c(Race,intr_Race)) %>% 
+  italicize_levels() #%>% 
+  # bold_labels()
+```
+
+## Experience
+- Include the interaction for all variables in the model, including strata-covariates interactions
+- Need extra cautious when interpreting the cause-specific hazard ratios
+  - Understand which strata is the reference level
+- Possible to extend to exposures that are more than 2 levels, or more than two competing events
+  - Extra effort to setup the design matrix, i.e. the interaction terms
+
+
+# Conclusion
+- Review the basic concepts about survival analysis and competing risk analysis
+  - Cause-specific hazard, preferably used in epidemiological study
+- Cause-specific hazard joint model proposed by @lunn1995applying
+  - Simultaneously models two or more competing events
+  - Stratified Cox Regression with a data augmentation step
+  - Test the effect change in competing risks via statistical interaction
+- Demonstrate the implementation
+  - Results are the same <!-- for the marginal CS hazard and Joint CS hazard, with additional hypothesis testing for effect change-->
+  - Cautious about the reference level <!-- in interpretation-->
+
+## Ackowledgement
+- Dr. George Howard <!-- finding such interest paper & offers the oppurtunity to let me lead this discussion-->
+- Dr. D. Leann Long <!-- valuable feedbacks on improving the presentation-->
+- Vicky Wang <!-- my girlfriend who fed me in the past couple days to make me still alive today-->
+- Rachel Stuckwisch <!-- tolerate me ingoring her texts-->
+
+## Reference
+
+
